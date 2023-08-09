@@ -1,6 +1,6 @@
 import gql from 'graphql-tag';
 import React from 'react';
-import { useMutation, useSubscription } from '@apollo/react-hooks';
+import { useQuery, useMutation, useSubscription } from '@apollo/react-hooks';
 
 const SUBSCRIBE_VIDEO_ADDED = gql`
   subscription onVideoAdded($title: String!) {
@@ -34,14 +34,53 @@ const SUBJECT_LINES_SUBSCRIPTION = gql`
   }
 `;
 
+const GENERATE_SUBJECT_LINES = gql`
+  mutation GenerateSubjectLines($sessionId: ID!) {
+    subjectLinesQueue(id: $sessionId, amount: 2)
+  }
+`;
+
+export const GET_SESSION = gql`
+  query GetSession($sessionId: ID!) {
+    session(id: $sessionId) {
+      id
+      creativeDescription
+      promptSubjectLines {
+        content
+      }
+      subjectLines {
+        id
+        state
+        revisions {
+          id
+          content
+          tone
+        }
+      }
+    }
+  }
+`;
+
 const NewVideoNotification = () => {
-  const [subscriptionId, setSubscriptionId] = React.useState(null);
   const [
     createSession,
     { data: sessionData, loading: sessionLoading, error: sessionError },
   ] = useMutation(CREATE_SESSION);
 
-  const handleCreateVideo = async () => {
+  const sessionId = React.useMemo(() => {
+    return sessionData?.sessionCreate?.id ?? '';
+  }, [sessionData]);
+
+  const { loading, error, data } = useQuery(GET_SESSION, {
+    variables: {
+      sessionId,
+    },
+    skip: !sessionId,
+  });
+
+  const [generateSubjectLines] = useMutation(GENERATE_SUBJECT_LINES);
+
+  const handleCreateSession = async () => {
     createSession({
       variables: {
         context: {
@@ -51,40 +90,35 @@ const NewVideoNotification = () => {
           imageUrl: 'test',
         },
       },
-      onCompleted: (data) => {
-        setSubscriptionId(data.sessionCreate.id);
+    });
+  };
+
+  const handleGenerateSubjectLines = async () => {
+    generateSubjectLines({
+      variables: {
+        sessionId: sessionData.sessionCreate.id,
       },
     });
   };
 
-  const { data, error, loading } = useSubscription(SUBJECT_LINES_SUBSCRIPTION, {
-    variables: {
-      sessionId: '97b80a7e-7702-47f9-a297-f3370a38f333',
-    },
-  });
+  // const { data, error, loading } = useSubscription(SUBJECT_LINES_SUBSCRIPTION, {
+  //   variables: {
+  //     sessionId,
+  //   },
+  //   skip: !sessionId,
+  // });
 
-  // console.log(sessionData, sessionLoading, sessionError);
   console.log('data', data);
   console.log('error', error);
   console.log('loading', loading);
   console.log('-------------------');
-  // const { data, error, loading } = useSubscription(SUBSCRIBE_VIDEO_ADDED, {
-  //   variables: {
-  //     title: 'My New Video',
-  //   },
-  // });
-
-  // if (loading) {
-  //   return <div>Loading...</div>;
-  // }
-
-  // if (error) {
-  //   return <div>Error! {error.message}</div>;
-  // }
 
   return (
     <div className="notification">
-      <button onClick={handleCreateVideo}>Create Video</button>
+      <button onClick={handleCreateSession}>Create Session</button>
+      <button onClick={handleGenerateSubjectLines}>
+        Generate Subject Lines
+      </button>
     </div>
   );
 };
